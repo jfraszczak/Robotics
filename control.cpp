@@ -42,7 +42,19 @@ CubicSpline spline ;
 
 struct Circle{
 
-   double t0 , t_rot, r, x_center, y_center, alpha;
+   double t0;
+   double t_rot = 5.0;
+
+   double r = 0.2; 
+   double x_center = 0.6;
+
+   double y_center = 0.35;
+
+   double alpha = 0;
+   
+   void resetTime(){
+   	t0 = gv.curTime;
+   }
 
    
 
@@ -498,17 +510,7 @@ void initProj2Control(GlobalVariables& gv)
 
 	// Control Initialization Code Here
 
-	circle.t0 = gv.curTime;
-
-	circle.t_rot = 5.0;
-
-	circle.r = 0.2;
-
-	circle.x_center = 0.6;
-
-	circle.y_center = 0.35;
-
-	circle.alpha = 0;
+	circle.resetTime();
 
 }
 
@@ -519,6 +521,7 @@ void initProj3Control(GlobalVariables& gv)
 {
 
 	// Control Initialization Code Here
+	circle.resetTime();
 
 }
 
@@ -821,12 +824,15 @@ void proj2Control(GlobalVariables& gv)
    // Controller
 
    double f[3];
+
    for(int i = 0; i < 3; i++){
 
       f[i] = gv.kp[i] * (gv.xd[i] - gv.x[i]) + gv.kv[i] * (gv.dxd[i] - gv.dx[i]);
 
    }
+
    
+
    for(int i = 0; i < 3; i++){
 
       gv.tau[i] = gv.Jtranspose[i][0] * f[0] + gv.Jtranspose[i][1] * f[1] + gv.Jtranspose[i][2] * f[2] + gv.G[i];
@@ -843,7 +849,101 @@ void proj3Control(GlobalVariables& gv)
 
 {
 
-   floatControl(gv);  // Remove this line when you implement proj3Control
+   double angular_velocity = 2 * M_PI / circle.t_rot;
+   double angular_acceleration = 2 * M_PI / 25;
+   double rotations_number = 3;
+   
+   double tb = angular_velocity / angular_acceleration;
+   double alpha_des = 0;
+   double angular_velocity_des = 0;
+   
+   double rotations_number_during_acceleration = 0.5 * angular_acceleration * pow(tb, 2) / (2 * M_PI);
+   double rotation_trajectory_time = (rotations_number - 2 * rotations_number_during_acceleration) * circle.t_rot;
+   
+   if(gv.curTime < circle.t0 + tb){
+   	angular_velocity_des = -angular_acceleration * (gv.curTime - circle.t0);
+   	alpha_des = -0.5 * angular_acceleration * pow((gv.curTime - circle.t0), 2);
+   	
+   	gv.xd[0] = cos(alpha_des) * circle.r + circle.x_center;
+
+	gv.xd[1] = sin(alpha_des) * circle.r + circle.y_center;
+
+	gv.xd[2] = circle.alpha;
+
+	   
+
+	gv.dxd[0] = -sin(alpha_des) * circle.r * angular_velocity_des;
+
+	gv.dxd[1] = cos(alpha_des) * circle.r * angular_velocity_des;
+
+	gv.dxd[2] = 0;
+	
+	gv.qd[0] = alpha_des;
+
+   	gv.qd[1] = angular_velocity_des;
+   }
+   else if(gv.curTime < circle.t0 + tb + rotation_trajectory_time){
+      gv.xd[0] = cos(-(gv.curTime - circle.t0 - tb) / circle.t_rot * 2 * M_PI - 0.5 * angular_acceleration * pow(tb, 2)) * circle.r + circle.x_center;
+
+      gv.xd[1] = sin(-(gv.curTime - circle.t0 - tb) / circle.t_rot * 2 * M_PI - 0.5 * angular_acceleration * pow(tb, 2)) * circle.r + circle.y_center;
+
+      gv.xd[2] = circle.alpha;
+
+   
+
+      gv.dxd[0] = sin(-(gv.curTime - circle.t0 - tb) / circle.t_rot * 2 * M_PI - 0.5 * angular_acceleration * pow(tb, 2)) * 2 * M_PI * circle.r / circle.t_rot;
+
+      gv.dxd[1] = -cos(-(gv.curTime - circle.t0 - tb) / circle.t_rot * 2 * M_PI - 0.5 * angular_acceleration * pow(tb, 2)) * 2 * M_PI * circle.r / circle.t_rot;
+
+      gv.dxd[2] = 0;
+      
+      gv.qd[0] = -(gv.curTime - circle.t0 - tb) / circle.t_rot * 2 * M_PI - 0.5 * angular_acceleration * pow(tb, 2);
+
+      gv.qd[1] = -angular_velocity;
+   }
+   else if(gv.curTime < circle.t0 + rotation_trajectory_time + 2 * tb){
+        angular_velocity_des = -angular_velocity + angular_acceleration * (gv.curTime - (circle.t0 + rotation_trajectory_time + tb));
+   	alpha_des = 0.5 * angular_acceleration * pow(gv.curTime - (circle.t0 + rotation_trajectory_time + tb), 2) - angular_velocity * (gv.curTime - (circle.t0 + rotation_trajectory_time + tb));
+   	alpha_des -= rotation_trajectory_time / circle.t_rot * 2 * M_PI + 0.5 * angular_acceleration * pow(tb, 2);
+   	
+   	gv.xd[0] = cos(alpha_des) * circle.r + circle.x_center;
+
+	gv.xd[1] = sin(alpha_des) * circle.r + circle.y_center;
+
+	gv.xd[2] = circle.alpha;
+
+	   
+
+	gv.dxd[0] = -sin(alpha_des) * circle.r * angular_velocity_des;
+
+	gv.dxd[1] = cos(alpha_des) * circle.r * angular_velocity_des;
+
+	gv.dxd[2] = 0;
+	
+	gv.qd[0] = alpha_des;
+
+   	gv.qd[1] = angular_velocity_des;
+   }
+   
+   gv.qd[0] = fmod(gv.qd[0], 2 * M_PI);
+   
+   // Controller
+
+   double f[3];
+
+   for(int i = 0; i < 3; i++){
+
+      f[i] = gv.kp[i] * (gv.xd[i] - gv.x[i]) + gv.kv[i] * (gv.dxd[i] - gv.dx[i]);
+
+   }
+
+   
+
+   for(int i = 0; i < 3; i++){
+
+      gv.tau[i] = gv.Jtranspose[i][0] * f[0] + gv.Jtranspose[i][1] * f[1] + gv.Jtranspose[i][2] * f[2] + gv.G[i];
+
+   }
 
 }
 
