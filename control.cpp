@@ -368,10 +368,6 @@ void initNjtrackControl(GlobalVariables& gv)
 
    }
 
-   
-
-   cout << "Tf: " << spline.tf << endl;
-
 }
 
 
